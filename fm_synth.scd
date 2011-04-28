@@ -1,16 +1,21 @@
 (
 SynthDef.new("fm-op",
-             { arg bus, freq = 440, mod = 1, amp = 0.2; 
-               Out.ar(0, SinOsc.ar(In.kr(bus) * freq, 0, amp));
+             { |freq, amp=1, mod_bus, out_bus|
+               Out.ar(out_bus, SinOsc.ar(freq * In.kr(mod_bus), 0, amp));
              }).send(s);
-SynthDef.new("fm-mod",
-             { arg freq = 440, bus;
-               Out.kr(bus, SinOsc.kr(freq, 0, 1));
-             }).send(s);
-b = Bus.control(s, 1);
 )
-               
 (
-x = Synth.new("fm-op", [\bus, b]);
-y = Synth.after(x, "fm-mod", [\bus, b, \freq, 50]);
+SynthDef.new("fm-op-nomod",
+             { |freq, amp=1, out_bus|
+               Out.kr(out_bus, SinOsc.kr(freq, 0, amp));
+             }).send(s);
+)              
+(
+var op1_mod_bus = Bus.control(s, 1);
+var op_1 = Synth.new("fm-op", ["freq", 440,
+                               "mod_bus", op1_mod_bus,
+                               "out_bus", 0]);
+var op_2 = Synth.new("fm-op-nomod", ["freq", 7,
+                                     "out_bus", op1_mod_bus]);
+                                     "out_bus", op1_mod_bus]);                  
 )
