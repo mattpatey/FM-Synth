@@ -18,25 +18,31 @@ var op2_mod_bus = Bus.control(s, 1);
 var op3_mod_bus = Bus.control(s, 1);
 var op4_mod_bus = Bus.control(s, 1);
 
-var dc_offset = Synth.new("dc-offset", [\out_bus, [op4_mod_bus]]);
-var op4 = Synth.after(dc_offset, "fm-op", [\freq, 5, \mod_bus, op4_mod_bus, \out_bus, op3_mod_bus]);
-var op3 = Synth.after(op4, "fm-op", [\freq, 1200, \mod_bus, op3_mod_bus, \out_bus, op2_mod_bus]);
-var op2 = Synth.after(op3, "fm-op", [\freq, 5.3, \mod_bus, op2_mod_bus, \out_bus, op1_mod_bus]);
-var op1 = Synth.after(op2, "fm-op", [\freq, 300, \mod_bus, op1_mod_bus]);
+var dc_offset = Synth.new("dc-offset", [\out_bus, [dc_offset_bus]]);
+var op4 = Synth.after(dc_offset, "fm-op", [\freq, 305]);
+var op3 = Synth.after(op4, "fm-op", [\freq, 303]);
+var op2 = Synth.after(op3, "fm-op", [\freq, 301]);
+var op1 = Synth.after(op2, "fm-op", [\freq, 300]);
 
 var algos = [
-  [0, op1_mod_bus, op2_mod_bus, op3_mod_bus],
-  [0, op1_mod_bus, op1_mod_bus, op1_mod_bus],
-  [0, op1_mod_bus, op2_mod_bus, op1_mod_bus],
-  [0, op1_mod_bus, 0, op3_mod_bus],
-  [0, 0, 0, 0]
+  [[0, op1_mod_bus, op2_mod_bus, op3_mod_bus], [op1_mod_bus, op2_mod_bus, op3_mod_bus, dc_offset_bus]],
+  [[0, op1_mod_bus, op1_mod_bus, op1_mod_bus], [op1_mod_bus, dc_offset_bus, dc_offset_bus, dc_offset_bus]],
+  [[0, op1_mod_bus, op2_mod_bus, op1_mod_bus], [op1_mod_bus, op2_mod_bus, dc_offset_bus, dc_offset_bus]],
+  [[0, op1_mod_bus, 0, op3_mod_bus], [op1_mod_bus, dc_offset_bus, op3_mod_bus, dc_offset_bus]],
+  [[0, 0, 0, 0], [dc_offset_bus, dc_offset_bus, dc_offset_bus, dc_offset_bus]]
 ];
 
 var set_algo = {|algo_num|
     var algo = algos[algo_num];
-    op1.set("out_bus", algo[0]);
-    op2.set("out_bus", algo[1]);
-    op3.set("out_bus", algo[2]);
-    op4.set("out_bus", algo[3]);
+    op1.set("out_bus", algo[0][0]);
+    op1.set("mod_bus", algo[1][0]);    
+    op2.set("out_bus", algo[0][1]);
+    op2.set("mod_bus", algo[1][1]);        
+    op3.set("out_bus", algo[0][2]);
+    op3.set("mod_bus", algo[1][2]);        
+    op4.set("out_bus", algo[0][3]);
+    op4.set("mod_bus", algo[1][3]);        
 };
+
+set_algo.value(2);
 )
