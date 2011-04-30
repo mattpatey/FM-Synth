@@ -7,7 +7,7 @@ SynthDef("fm-op", { |out_bus, mod_bus, freq|
 // use it to multiply another signal by one. Used
 // for FM operators that should not be modulated.
 SynthDef("dc-offset", { |out_bus|
-    Out.ar(out_bus, SinOsc.ar(0, 0, 1, add:1));
+    Out.ar(out_bus, DC.ar(1.0));
 }).send(s);
 )
 
