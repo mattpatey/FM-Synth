@@ -19,34 +19,26 @@ SynthDef("eg", { |out, atk=0.001, sus=0.2, peak=0.3, curve=2|
 
 (
 var dc_offset_bus = Bus.control(s, 1);
-
-var op1_mod_bus = Bus.control(s, 1);
-var op1_amp_bus = Bus.control(s, 1);
-
-var op2_mod_bus = Bus.control(s, 1);
-var op2_amp_bus = Bus.control(s, 1);
-
-var op3_mod_bus = Bus.control(s, 1);
-var op3_amp_bus = Bus.control(s, 1);
-
-var op4_mod_bus = Bus.control(s, 1);
-var op4_amp_bus = Bus.control(s, 1);
-
 var dc_offset = Synth.new("dc-offset", [\out_bus, dc_offset_bus]);
 
-var op4 = Synth.after(dc_offset, "fm-op", [\freq, 783, \amp_bus, op4_amp_bus]);
-var op4_amp_eg = Synth.before(op4, "eg", [\out, op4_amp_bus]);
+var op = { |freq=440|
+    var mod_bus = Bus.control(s, 1);
+    var amp_bus = Bus.control(s, 1);
+    var amp_eg = Synth.new("eg", [\out, amp_bus]);
+    var mod = Synth.after(amp_eg, "dc-offset", [\out, mod_bus]);
+    var operator = Synth.after(mod, "fm-op", [\freq, freq, 
+                                              \mod_bus, mod_bus, 
+                                              \amp_bus, amp_bus,
+                                              \out_bus, 0]);
+};
 
-var op3 = Synth.after(op4, "fm-op", [\freq, 500, \amp_bus, op3_amp_bus]);
-var op3_amp_eg = Synth.before(op3, "eg", [\out, op3_amp_bus]);
+var operators;
 
-var op2 = Synth.after(op3, "fm-op", [\freq, 422, \amp_bus, op2_amp_bus]);
-var op2_amp_eg = Synth.before(op2, "eg", [\out, op2_amp_bus]);
+4.do({
+    operators.add(op.value(rrand(200, 1200)));
+});
 
-var op1 = Synth.after(op1_amp_eg, "fm-op", [\freq, 300, \amp_bus, op1_amp_bus]);
-var op1_freq_mod = Synth.before(op1, "lfo", [\out, op1_mod_bus, \freq, 1]);
-var op1_amp_eg = Synth.before(op1, "eg", [\out, op1_amp_bus]);
-
+/*
 var algos = [
   [[0, op1_mod_bus, op2_mod_bus, op3_mod_bus], [op1_mod_bus, op2_mod_bus, op3_mod_bus, dc_offset_bus]],
   [[0, op1_mod_bus, op1_mod_bus, op1_mod_bus], [op1_mod_bus, dc_offset_bus, dc_offset_bus, dc_offset_bus]],
@@ -68,4 +60,5 @@ var set_algo = {|algo_num|
 };
 
 set_algo.value(3);
+*/
 )
