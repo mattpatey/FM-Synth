@@ -1,14 +1,14 @@
 (
-SynthDef("fm-op", { |freq, mod_bus, amp_bus, out_bus|
-    Out.ar(out_bus, SinOsc.ar(In.ar(mod_bus) * freq, 0, 1 * In.kr(amp_bus)));
+SynthDef("fm_op", { |freq, fmod, abase, amod, out|
+    Out.ar(out, SinOsc.ar(In.ar(fmod) * freq, 0, abase * In.ar(amod)));
 }).send(s);
 
-SynthDef("dc-offset", { |out_bus|
-    Out.ar(out_bus, DC.ar(1.0));
+SynthDef("dc_offset", { |out|
+    Out.ar(out, DC.ar(1.0));
 }).send(s);
 
-SynthDef("lfo", { |out_bus, freq|
-    Out.ar(out_bus, LFNoise0.ar(freq, 1, 0).cpsmidi);
+SynthDef("lfo", { |rate, out|
+    Out.ar(out, Saw.ar(rate, 1, 1));
 }).send(s);
 
 SynthDef("eg", { |out, atk=0.001, sus=0.2, peak=0.3, curve=2| 
@@ -18,47 +18,67 @@ SynthDef("eg", { |out, atk=0.001, sus=0.2, peak=0.3, curve=2|
 )
 
 (
-var dc_offset_bus = Bus.control(s, 1);
-var dc_offset = Synth.new("dc-offset", [\out_bus, dc_offset_bus]);
+var algorithms, set_algorithm;
+var op_bus = Bus.audio(s, 1);
+var dead_bus = Bus.audio(s, 1);
+var mod_grp = Group.tail(s);
+var op_grp = Group.tail(s);
+var ops;
+var op;
+var lfo;
 
-var op = { |freq=440|
-    var mod_bus = Bus.control(s, 1);
-    var amp_bus = Bus.control(s, 1);
-    var amp_eg = Synth.new("eg", [\out, amp_bus]);
-    var mod = Synth.after(amp_eg, "dc-offset", [\out, mod_bus]);
-    var operator = Synth.after(mod, "fm-op", [\freq, freq, 
-                                              \mod_bus, mod_bus, 
-                                              \amp_bus, amp_bus,
-                                              \out_bus, 0]);
+op = { |freq=440|
+    var op_data;
+    
+    var mod_bus;
+    var amp_bus;
+    var amp_eg;
+    var mod;
+    var op_def;
+    
+    var set_out;
+    var get_mod_bus;
+
+    mod_bus = Bus.audio(s, 1);
+    amp_bus = Bus.control(s, 1);
+    amp_eg = Synth.head(mod_grp, "dc_offset", [\out, amp_bus]);
+    mod = Synth.head(mod_grp, "dc_offset", [\out, mod_bus]);    
+    op_def = Synth.head(op_grp, "fm_op", [\freq, freq,
+                                          \fmod, mod_bus,
+                                          \abase, 1,
+                                          \amod, amp_bus,
+                                          \out, op_bus]);
+    op_data = Dictionary.new;
+    op_data.put(\set_freq, {|value| op_def.set(\freq, value)});
+    op_data.put(\set_out, {|value| op_def.set(\out, value)});
+    op_data.put(\get_mod_bus, {mod_bus});
 };
 
-var operators;
-
+ops = List();
 4.do({
-    operators.add(op.value(rrand(200, 1200)));
+    ops.add(op.value());
 });
 
-/*
-var algos = [
-  [[0, op1_mod_bus, op2_mod_bus, op3_mod_bus], [op1_mod_bus, op2_mod_bus, op3_mod_bus, dc_offset_bus]],
-  [[0, op1_mod_bus, op1_mod_bus, op1_mod_bus], [op1_mod_bus, dc_offset_bus, dc_offset_bus, dc_offset_bus]],
-  [[0, op1_mod_bus, op2_mod_bus, op1_mod_bus], [op1_mod_bus, op2_mod_bus, dc_offset_bus, dc_offset_bus]],
-  [[0, op1_mod_bus, 0, op3_mod_bus], [op1_mod_bus, dc_offset_bus, op3_mod_bus, dc_offset_bus]],
-  [[0, 0, 0, 0], [dc_offset_bus, dc_offset_bus, dc_offset_bus, dc_offset_bus]]
+algorithms = [
+    [nil, 0, 1, 2],
+    [nil, 0, 1, 0],
+    [nil, 0, 0, 0],
+    [nil, nil, nil, nil]
 ];
 
-var set_algo = {|algo_num|
-    var algo = algos[algo_num];
-    op1.set("out_bus", algo[0][0]);
-    op1.set("mod_bus", algo[1][0]);    
-    op2.set("out_bus", algo[0][1]);
-    op2.set("mod_bus", algo[1][1]);        
-    op3.set("out_bus", algo[0][2]);
-    op3.set("mod_bus", algo[1][2]);        
-    op4.set("out_bus", algo[0][3]);
-    op4.set("mod_bus", algo[1][3]);
+set_algorithm = {|value|
+    var algorithm = algorithms[value];
+    var set_out_to_speaker = {|operator| operator.at(\set_out).value(op_bus)};
+    var set_out_to_mod = {|operator, op_index| operator.at(\set_out).value(ops[op_index].at(\get_mod_bus).value())};
+
+    ops.do({|op, index|
+        var mod_op_index = algorithm[index];
+        var fun = if(mod_op_index.isNil, {set_out_to_speaker}, {set_out_to_mod});
+        fun.value(op, mod_op_index);
+    });
 };
 
-set_algo.value(3);
-*/
+set_algorithm.value(0);
+
+{ Out.ar(0, In.ar(op_bus, 1)) }.play(s, addAction: \addToTail);
 )
