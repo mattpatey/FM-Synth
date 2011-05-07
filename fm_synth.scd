@@ -4,7 +4,7 @@ SynthDef("fm_op", { |fbase, fmod, freq, abase, amod, out|
     //
     // FM and AM modulation are possible by passing audio rate signals to
     // `fmod` and `amod`, respectively.
-    var oscillator = SinOsc.ar(In.ar(fmod) * (fbase + In.ar(freq)), 0, abase * In.ar(amod));
+    var oscillator = SinOsc.ar(In.ar(fmod) * (fbase + In.kr(freq)), 0, abase * In.ar(amod));
     Out.ar(out, oscillator);
 }).send(s);
 
@@ -20,15 +20,14 @@ SynthDef("dc_offset", { |value=1.0, out|
     Out.ar(out, signal);
 }).send(s);
 
-SynthDef("sequencer", {|rate=1.0, out|
-    var trigger = LFPulse.kr(rate, 0, 0.5, 1);
-    var signal = Stepper.kr(trigger, 0, 0, 15, 1, 0);
-    var value = Select.kr(signal, [440, 880]);
+SynthDef("sequencer", {|clock, sequence, sequence_length, out|
+    var value = Select.kr(Stepper.kr(In.kr(clock), 0, 0, 5, 1, 0), //LFSaw.kr(0.5, 0.0, 3, 3),
+                          [100, 200, 300, 400, 500, 600]);
     Out.kr(out, value);
 }).send(s);
 
-SynthDef("lfo", {|out|
-    Out.kr(out, LFPulse.kr(1.0, 0, 0.5, 1));
+SynthDef("lfo", {|rate, out|
+    Out.kr(out, LFPulse.kr(rate, 0, 0.5, 1));
 }).send(s);
 )
 
@@ -36,7 +35,10 @@ SynthDef("lfo", {|out|
 var algorithms;
 var clock;
 var control_grp;
+var master_clock;
+var master_clock_bus;
 var master_gate;
+var master_gate_bus;
 var mod_grp;
 var num_ops;
 var op;
@@ -66,16 +68,15 @@ op = { |fbase=440, gain=1|
 
     // Busses to channel all modulation signals to the synthdef.
     amp_mod_bus = Bus.audio(s, 1);
-    freq_bus = Bus.audio(s, 1);
+    freq_bus = Bus.control(s, 1);
     freq_mod_bus = Bus.audio(s, 1);
 
     // Setup some default modulation sources.
-    amp_eg = Synth.tail(mod_grp, "eg", [\gate, master_gate,
+    amp_eg = Synth.tail(mod_grp, "eg", [\gate, master_clock_bus, // TODO: Change to gate bus.
                                         \out, amp_mod_bus]);
-    freq = Synth.tail(mod_grp, "dc_offset", [\value, 0.0,
-                                             \out, freq_bus]);
     freq_mod = Synth.tail(mod_grp, "dc_offset", [\out, freq_mod_bus]);
     op = Synth.head(op_grp, "fm_op", [\fbase, fbase,
+                                      \freq, sequencer_bus,
                                       \fmod, freq_mod_bus,
                                       \abase, gain,
                                       \amod, amp_mod_bus,
@@ -126,7 +127,8 @@ set_algorithm = {|value|
 };
 
 // TODO: Make sure correct bus type (control, audio) is used.
-master_gate = Bus.control(s, 1);
+master_clock_bus = Bus.control(s, 1);
+master_gate_bus = Bus.control(s, 1);
 op_bus = Bus.audio(s, 1);
 sequencer_bus = Bus.control(s, 1);
 
@@ -151,6 +153,9 @@ num_ops.do({
 
 // DEBUG
 set_algorithm.value(0);
-clock = Synth.tail(control_grp, "lfo", [\out, master_gate]);
+master_clock = Synth.tail(control_grp, "lfo", [\rate, 1,
+                                               \out, master_clock_bus]);
+sequencer = Synth.tail(mod_grp, "sequencer", [\clock, master_clock_bus,
+                                              \out, sequencer_bus]);
 { Out.ar(0, In.ar(op_bus, 1)) }.play(s, addAction: \addToTail);
 )
