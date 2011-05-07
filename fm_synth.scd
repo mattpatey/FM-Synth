@@ -1,30 +1,34 @@
 (
 SynthDef("fm_op", { |freq, fmod, abase, amod, out|
-	// A standard, run-of-the-mill sine wave oscillator.
-	//
-	// FM and AM modulation are possible by passing audio rate signals to
-	// `fmod` and `amod`, respectively.
-	var oscillator = SinOsc.ar(In.ar(fmod) * freq, 0, abase * In.ar(amod));
+    // A standard, run-of-the-mill sine wave oscillator.
+    //
+    // FM and AM modulation are possible by passing audio rate signals to
+    // `fmod` and `amod`, respectively.
+    var oscillator = SinOsc.ar(In.ar(fmod) * freq, 0, abase * In.ar(amod));
     Out.ar(out, oscillator);
 }).send(s);
 
-SynthDef("eg", { |out, a=0.01, d=0.01, s=0.7, r=0.01|
-	// A standard, run-of-the-mill ADSR envelope generator.
-	var envelope = EnvGen.ar(Env.adsr(a, d, s, r));
-	Out.ar(out, envelope);
+SynthDef("eg", { |a=0.01, d=0.7, s=0.0, r=0.01, gate, out|
+    // A standard, run-of-the-mill ADSR envelope generator.
+    var envelope = EnvGen.ar(Env.adsr(a, d, s, r), In.kr(gate));
+    Out.ar(out, envelope);
 }).send(s);
 
 SynthDef("dc_offset", { |out|
-	// A static signal.
-	var signal = DC.ar(1.0);
+    // A static signal.
+    var signal = DC.ar(1.0);
     Out.ar(out, signal);
 }).send(s);
 
-
+SynthDef("square_lfo", { |out|
+    var signal = LFPulse.kr(0.7, 0, 0.5, 1);
+    Out.kr(out, signal);
+}).send(s);
 )
 
 (
 var algorithms;
+var control_grp;
 var mod_grp;
 var num_ops;
 var op;
@@ -34,32 +38,46 @@ var ops;
 var set_algorithm;
 
 op = { |freq=440, gain=1|
-	var amp_mod;
+    var amp_eg;
     var amp_mod_bus;
     var freq_mod;
     var freq_mod_bus;
+    var gate;
+    var gate_bus;
     var op;
     var op_data;
+    var set_adsr;
 
-	// Busses to channel all modulation signals to the synthdef.
-    amp_mod_bus = Bus.control(s, 1);
-	freq_mod_bus = Bus.audio(s, 1);
+    // Busses to channel all modulation signals to the synthdef.
+    amp_mod_bus = Bus.audio(s, 1);
+    freq_mod_bus = Bus.audio(s, 1);
+    gate_bus = Bus.control(s, 1);
 
-	// Setup some default modulation sources.
-	amp_mod = Synth.tail(mod_grp, "eg", [\out, amp_mod_bus]);
+    // Setup some default modulation sources.
+    amp_eg = Synth.tail(mod_grp, "eg", [\gate, gate_bus,
+                                        \out, amp_mod_bus]);
     freq_mod = Synth.tail(mod_grp, "dc_offset", [\out, freq_mod_bus]);
+    gate = Synth.tail(control_grp, "square_lfo", [\out, gate_bus]);
 
     op = Synth.head(op_grp, "fm_op", [\freq, freq,
-		                              \fmod, freq_mod_bus,
-		                              \abase, gain,
+                                      \fmod, freq_mod_bus,
+                                      \abase, gain,
                                       \amod, amp_mod_bus,
                                       \out, op_bus]);
 
-	// LATER: Why not use a generic object?
+    // LATER: Why not use a generic object?
     op_data = Dictionary.new;
     op_data.put(\set_freq, {|value| op.set(\freq, value)});
     op_data.put(\set_out, {|value| op.set(\out, value)});
     op_data.put(\get_freq_mod_bus, {freq_mod_bus});
+
+    set_adsr = {|adsr|
+        amp_eg.set(\a, adsr[0]);
+        amp_eg.set(\d, adsr[1]);
+        amp_eg.set(\s, adsr[2]);
+        amp_eg.set(\r, adsr[3]);
+    };
+    op_data.put(\set_adsr, {|value| set_adsr.value(value)});
 };
 
 set_algorithm = {|value|
@@ -75,21 +93,24 @@ set_algorithm = {|value|
 };
 
 op_bus = Bus.audio(s, 1);
-op_grp = Group.tail(s);
+control_grp = Group.tail(s);
 mod_grp = Group.tail(s);
+op_grp = Group.tail(s);
 ops = List();
+
 num_ops = 4;
-
-num_ops.do({
-    ops.add(op.value());
-});
-
 algorithms = [
     [nil, 0, 1, 2],
     [nil, 0, 1, 0],
     [nil, 0, 0, 0],
     [nil, nil, nil, nil]
 ];
+
+num_ops.do({
+    ops.add(op.value());
+});
+
+
 
 
 // DEBUG
