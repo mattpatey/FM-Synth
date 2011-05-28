@@ -20,9 +20,10 @@ SynthDef("dc_offset", { |value=1.0, out|
     Out.ar(out, signal);
 }).send(s);
 
-SynthDef("sequencer", {|clock, sequence, sequence_length, out|
-    var value = Select.kr(Stepper.kr(In.kr(clock), 0, 0, 5, 1, 0), //LFSaw.kr(0.5, 0.0, 3, 3),
-                          [100, 200, 300, 400, 500, 600]);
+SynthDef("sequencer", {|clock, sequence, out|
+	var s = [100, 200, 300, 400];
+    var value = Select.kr(Stepper.kr(In.kr(clock), 0, 0, 5, 1, 0),
+                          s);
     Out.kr(out, value);
 }).send(s);
 
@@ -72,7 +73,7 @@ op = { |fbase=440, gain=1|
     freq_mod_bus = Bus.audio(s, 1);
 
     // Setup some default modulation sources.
-    amp_eg = Synth.tail(mod_grp, "eg", [\gate, master_clock_bus, // TODO: Change to gate bus.
+    amp_eg = Synth.tail(mod_grp, "eg", [\gate, master_clock_bus, // TODO: Change to gate bus once I've figured out how to send one signal to multiple places.
                                         \out, amp_mod_bus]);
     freq_mod = Synth.tail(mod_grp, "dc_offset", [\out, freq_mod_bus]);
     op = Synth.head(op_grp, "fm_op", [\fbase, fbase,
@@ -156,6 +157,7 @@ set_algorithm.value(0);
 master_clock = Synth.tail(control_grp, "lfo", [\rate, 1,
                                                \out, master_clock_bus]);
 sequencer = Synth.tail(mod_grp, "sequencer", [\clock, master_clock_bus,
+                                              \sequence, [500, 100, 100, 100],
                                               \out, sequencer_bus]);
 { Out.ar(0, In.ar(op_bus, 1)) }.play(s, addAction: \addToTail);
 )
