@@ -33,39 +33,50 @@ SynthDef("lfo", {|rate, out|
 )
 
 (
-var algorithms;
-var clock;
-var control_grp;
-var master_clock;
-var master_clock_bus;
-var master_gate;
-var master_gate_bus;
-var mod_grp;
-var num_ops;
-var op;
-var op_bus;
-var op_grp;
-var ops;
-var sequence;
-var sequencer;
-var sequencer_bus;
-var set_algorithm;
+var algorithms,
+    clock,
+    control_grp,
+    master_clock,
+    master_clock_bus,
+    master_gate,
+    master_gate_bus,
+    mod_grp,
+    num_ops,
+    op,
+    op_bus,
+    op_grp,
+    ops,
+    sequence,
+    sequencer,
+    sequencer_bus,
+    set_algorithm;
 
 op = { |fbase=440, gain=1|
-    var amp_eg;
-    var amp_mod_bus;
-    var freq;
-    var freq_bus;
-    var freq_mod;
-    var freq_mod_bus;
-    var get_freq_mod_bus;
-    var op;
-    var op_data;
-    var set_adsr;
-    var set_fbase;
-    var set_gate;
-    var set_gate_bus;
-    var set_out;
+	// FM operator.
+	//
+	// An operator consists of a sine wave oscillator, an ADSR
+	// envelope, and several inputs and outputs.
+	//
+	// It has inputs for frequency modulation and a gate input to
+	// trigger an ADSR envelope that modulates its amplitude.
+	//
+	// Instantiating an FM operator will return a dictionary
+	// containing functions that allow one to interact with the
+	// operator's parameters.
+    var amp_eg,
+	    amp_mod_bus,
+	    freq,
+	    freq_bus,
+	    freq_mod,
+	    freq_mod_bus,
+	    get_freq_mod_bus,
+	    op,
+	    op_data,
+	    set_adsr,
+	    set_fbase,
+	    set_gate,
+	    set_gate_bus,
+	    set_out;
 
     // Busses to channel all modulation signals to the synthdef.
     amp_mod_bus = Bus.audio(s, 1);
