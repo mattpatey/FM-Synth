@@ -1,33 +1,28 @@
 (
-SynthDef("fm_op", { |fbase, fmod, freq, abase, amod, out|
+SynthDef("fm_op", { |fbase, fmod_bus, freq_bus, abase, amod_bus, out_bus|
     // A standard, run-of-the-mill sine wave oscillator.
     //
     // FM and AM modulation are possible by passing audio rate signals to
     // `fmod` and `amod`, respectively.
-    var oscillator = SinOsc.ar(In.ar(fmod) * (fbase + In.kr(freq)), 0, abase * In.ar(amod));
-    Out.ar(out, oscillator);
+    var oscillator = SinOsc.ar(In.ar(fmod_bus) * (fbase + In.kr(freq_bus)), 0, abase * In.ar(amod_bus));
+    Out.ar(out_bus, oscillator);
 }).send(s);
 
-SynthDef("eg", { |a=0.01, d=0.7, s=0.0, r=0.01, gate, out|
+SynthDef("eg", { |a=0.01, d=0.7, s=0.0, r=0.01, gate_bus, out_bus|
     // A standard, run-of-the-mill ADSR envelope generator.
-    var envelope = EnvGen.ar(Env.adsr(a, d, s, r), In.ar(gate));
-    Out.ar(out, envelope);
+    var envelope = EnvGen.ar(Env.adsr(a, d, s, r), In.ar(gate_bus));
+    Out.ar(out_bus, envelope);
 }).send(s);
 
-SynthDef("dc_offset", { |value=1.0, out|
+SynthDef("dc_offset", { |value=1.0, out_bus|
     // A static signal.
     var signal = DC.ar(value);
-    Out.ar(out, signal);
-}).send(s);
-
-SynthDef("gate", { |control_bus, out_bus|
-    // A static signal.
-    Gate.ar(DC.ar(1.0), In.ar(control_bus));
+    Out.ar(out_bus, signal);
 }).send(s);
 )
 
 (
-var fm_synth, my_synth;
+var fm_synth, my_synth, gate, gate_bus, master_grp, master_gate_bus, set_base_freq;
 
 fm_synth = {
 	// Four-operator FM synthesizer.
@@ -36,8 +31,7 @@ fm_synth = {
 	var algorithms, control_grp, mod_grp,
         num_ops, op, op_bus, op_grp,
         ops, sequence, set_algorithm,
-	    gate_bus, op_gate_bus, gate,
-	    gate_control;
+        op_gate_bus, s;
 
 	op = { |gate_bus, fbase=440, gain=1|
         // FM operator.
@@ -63,14 +57,14 @@ fm_synth = {
         freq_mod_bus = Bus.audio(s, 1);
 
         // Setup some default modulation sources.
-        amp_eg = Synth.tail(mod_grp, "eg", [\gate, gate_bus,
-                                            \out, amp_mod_bus]);
-        freq_mod = Synth.tail(mod_grp, "dc_offset", [\out, freq_mod_bus]);
+        amp_eg = Synth.tail(mod_grp, "eg", [\gate_bus, gate_bus,
+                                            \out_bus, amp_mod_bus]);
+        freq_mod = Synth.tail(mod_grp, "dc_offset", [\out_bus, freq_mod_bus]);
         op = Synth.head(op_grp, "fm_op", [\fbase, fbase,
-                                          \fmod, freq_mod_bus,
+                                          \fmod_bus, freq_mod_bus,
                                           \abase, gain,
-                                          \amod, amp_mod_bus,
-                                          \out, op_bus]);
+                                          \amod_bus, amp_mod_bus,
+                                          \out_bus, op_bus]);
 
         // LATER: Why can't I use a generic object?
         op_data = Dictionary.new;
@@ -83,9 +77,9 @@ fm_synth = {
 
         set_out = {|value|
 			// Set the bus that will receive the operator's output.
-            op.set(\out, value);
+            op.set(\out_bus, value);
         };
-        op_data.put(\set_out, set_out);
+        op_data.put(\set_out_bus, set_out);
 
         set_adsr = {|adsr|
 			// Set times/levels for the operator's amplitude envelope.
@@ -95,16 +89,15 @@ fm_synth = {
             amp_eg.set(\r, adsr[3]);
         };
         op_data.put(\set_adsr, {|value| set_adsr.value(value)});
-
 		op_data.put(\get_freq_mod_bus, {freq_mod_bus});
     };
 
-    set_algorithm = {|value|
+    set_algorithm = { |value|
 		// Set the outputs of the operators to a pre-defined
 		// configuration.
         var algorithm = algorithms[value];
-        var set_out_to_speaker = {|operator| operator.at(\set_out).value(op_bus)};
-        var set_out_to_mod = {|operator, op_index| operator.at(\set_out).value(ops[op_index].at(\get_freq_mod_bus).value())};
+        var set_out_to_speaker = {|operator| operator.at(\set_out_bus).value(op_bus)};
+        var set_out_to_mod = {|operator, op_index| operator.at(\set_out_bus).value(ops[op_index].at(\get_freq_mod_bus).value())};
 
         ops.do({|op, index|
             var mod_op_index = algorithm[index];
@@ -112,6 +105,12 @@ fm_synth = {
             fun.value(op, mod_op_index);
         });
     };
+
+	set_base_freq = { |value|
+        ops.do({ |op, i|
+            op.at(\set_fbase).value(value);
+        });
+	};
 
     algorithms = [
         [nil, 0, 1, 2],
@@ -121,15 +120,11 @@ fm_synth = {
     ];
 
     op_bus = Bus.audio(s, 1);
-	gate_bus = Bus.audio(s, 1);
 	op_gate_bus = Bus.audio(s, 1);
 
     control_grp = Group.tail(s);
     mod_grp = Group.tail(s);
     op_grp = Group.tail(s);
-
-	gate_control = Synth.tail(control_grp, "dc_offset", [\value, 0.0, \out, gate_bus]);
-	gate = Synth.tail(control_grp, "gate", [\control_bus, gate_bus, \out, op_gate_bus]);
 
     ops = List();
     num_ops = 4;
@@ -138,25 +133,43 @@ fm_synth = {
         ops.add(operator);
     });
 
-    MIDIIn.connect;
-
-    MIDIIn.noteOn = { |port, chan, note, vel|
-		// Send '1' to gate bus.
-		gate_control.free;
-		gate_control = Synth.tail(control_grp, "dc_offset", [\value, 1.0, \out, gate_bus]);
-	};
-    MIDIIn.noteOff = {
-		// Send '0' to gate bus.
-		gate_control.free;
-		gate_control = Synth.tail(control_grp, "dc_offset", [\value, 0.0, \out, gate_bus]);
-	};
-
 	// DEBUG
-	set_algorithm.value(0);
-    { Out.ar(0, In.ar(op_bus, 1)) }.play(s, addAction: \addToTail);
+    //gate = Synth.head(mod_grp, "dc_offset", [\value, 1.0, \out_bus, op_gate_bus]);
+	//{ Out.ar(0, In.ar(op_bus, 1)) }.play(s, addAction: \addToTail);
+
+	s = Dictionary.new;
+    s.put(\get_gate_bus, {op_gate_bus});
+	s.put(\set_algorithm, set_algorithm);
+	s.put(\get_output, {op_bus});
+	s.put(\set_base_freq, set_base_freq)
 };
 
 
 // DEBUG
-fm_synth.value();
+master_grp = Group.head(s);
+master_gate_bus = Bus.audio(s, 1);
+
+my_synth = fm_synth.value();
+my_synth.at(\set_algorithm).value(2);
+
+gate_bus = my_synth.at(\get_gate_bus).value();
+gate = Synth.head(master_grp, "dc_offset", [\value, 0.0, \out_bus, gate_bus]);
+
+MIDIIn.connect;
+MIDIIn.noteOn = { |port, chan, note, vel|
+	// Not sure if I really need to free the gate synth or not. Is
+	// there a better approach?
+	my_synth.at(\set_base_freq).value(note.midicps);
+	gate.free;
+	gate = Synth.head(master_grp, "dc_offset", [\value, 1.0, \out_bus, gate_bus]);
+};
+
+MIDIIn.noteOff = {
+	// Again, not sure if I need to free the synth everytime I want to
+	// change the gate value.
+	gate.free;
+	gate = Synth.head(master_grp, "dc_offset", [\value, 0.0, \out_bus, gate_bus]);
+};
+
+{ Out.ar(0, In.ar(my_synth.at(\get_output).value(), 1)) }.play(s, addAction: \addToTail);
 )
