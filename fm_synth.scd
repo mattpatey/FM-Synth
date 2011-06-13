@@ -22,16 +22,30 @@ SynthDef("dc_offset", { |value=1.0, out_bus|
 )
 
 (
-var fm_synth, my_synth, gate, gate_bus, master_grp, master_gate_bus, set_base_freq;
+var fm_synth,
+    gate,
+    gate_bus,
+    master_gate_bus,
+    master_grp,
+    my_synth,
+    srv,
+    set_base_freq;
 
 fm_synth = {
     // Four-operator FM synthesizer.
     //
     //
-    var algorithms, control_grp, mod_grp,
-        num_ops, op, op_bus, op_grp,
-        ops, sequence, set_algorithm,
-        op_gate_bus, s;
+    var algorithms,
+        control_grp,
+        mod_grp,
+        num_ops,
+        op,
+        ops,
+        op_bus,
+        op_gate_bus,
+        op_grp,
+        set_algorithm,
+        synth_instance;
 
     op = { |gate_bus, fbase=440, gain=1|
         // FM operator.
@@ -45,11 +59,17 @@ fm_synth = {
         // Instantiating an FM operator will return a dictionary
         // containing functions that allow one to interact with the
         // operator's parameters.
-        var amp_eg, amp_mod_bus, freq,
-            freq_bus, freq_mod, freq_mod_bus,
-            get_freq_mod_bus, op, op_data,
-            set_adsr, set_fbase, set_gate,
-            set_out, gate;
+        var amp_eg,
+            amp_mod_bus,
+            freq_bus,
+            freq_mod,
+            freq_mod_bus,
+            get_freq_mod_bus,
+            op,
+            op_instance,
+            set_adsr,
+            set_fbase,
+            set_out;
 
         // Instances of an FM synth create busses on the fly.
         amp_mod_bus = Bus.audio(s, 1);
@@ -67,19 +87,19 @@ fm_synth = {
                                           \out_bus, op_bus]);
 
         // LATER: Why can't I use a generic object?
-        op_data = Dictionary.new;
+        op_instance = Dictionary.new;
 
         set_fbase = {|value|
             // Set the relative frequency of the operator.
             op.set(\fbase, value);
         };
-        op_data.put(\set_fbase, set_fbase);
+        op_instance.put(\set_fbase, set_fbase);
 
         set_out = {|value|
             // Set the bus that will receive the operator's output.
             op.set(\out_bus, value);
         };
-        op_data.put(\set_out_bus, set_out);
+        op_instance.put(\set_out_bus, set_out);
 
         set_adsr = {|adsr|
             // Set times/levels for the operator's amplitude envelope.
@@ -88,8 +108,8 @@ fm_synth = {
             amp_eg.set(\s, adsr[2]);
             amp_eg.set(\r, adsr[3]);
         };
-        op_data.put(\set_adsr, {|value| set_adsr.value(value)});
-        op_data.put(\get_freq_mod_bus, {freq_mod_bus});
+        op_instance.put(\set_adsr, {|value| set_adsr.value(value)});
+        op_instance.put(\get_freq_mod_bus, {freq_mod_bus});
     };
 
     set_algorithm = { |value|
@@ -137,17 +157,17 @@ fm_synth = {
     //gate = Synth.head(mod_grp, "dc_offset", [\value, 1.0, \out_bus, op_gate_bus]);
     //{ Out.ar(0, In.ar(op_bus, 1)) }.play(s, addAction: \addToTail);
 
-    s = Dictionary.new;
-    s.put(\get_gate_bus, {op_gate_bus});
-    s.put(\set_algorithm, set_algorithm);
-    s.put(\get_output, {op_bus});
-    s.put(\set_base_freq, set_base_freq)
+    synth_instance = Dictionary.new;
+    synth_instance.put(\get_gate_bus, {op_gate_bus});
+    synth_instance.put(\set_algorithm, set_algorithm);
+    synth_instance.put(\get_output, {op_bus});
+    synth_instance.put(\set_base_freq, set_base_freq)
 };
 
-
 // DEBUG
-master_grp = Group.head(s);
-master_gate_bus = Bus.audio(s, 1);
+srv = Server.default;
+master_grp = Group.head(srv);
+master_gate_bus = Bus.audio(srv, 1);
 
 my_synth = fm_synth.value();
 my_synth.at(\set_algorithm).value(2);
@@ -171,5 +191,5 @@ MIDIIn.noteOff = {
     gate = Synth.head(master_grp, "dc_offset", [\value, 0.0, \out_bus, gate_bus]);
 };
 
-{ Out.ar(0, In.ar(my_synth.at(\get_output).value(), 1)) }.play(s, addAction: \addToTail);
+{ Out.ar(0, In.ar(my_synth.at(\get_output).value(), 1)) }.play(srv, addAction: \addToTail);
 )
