@@ -8,9 +8,10 @@ SynthDef("fm_op", { |fbase, fmod_bus, freq_bus, abase, amod_bus, out_bus|
     Out.ar(out_bus, oscillator);
 }).send(s);
 
-SynthDef("eg", { |a=0.01, d=0.7, s=0.0, r=0.01, gate_bus, out_bus|
-    // A standard, run-of-the-mill ADSR envelope generator.
-    var envelope = EnvGen.ar(Env.adsr(a, d, s, r), In.ar(gate_bus));
+SynthDef("eg", { |a=0.01, d=0.7, s=0.0, r=0.01, gate_bus, level_bus, out_bus|
+    // A standard, run-of-the-mill ADSR envelope generator, with
+    // modulation possibilities on the peak level.
+    var envelope = EnvGen.ar(Env.adsr(a, d, s, r, In.ar(level_bus)), In.ar(gate_bus));
     Out.ar(out_bus, envelope);
 }).send(s);
 
@@ -23,29 +24,31 @@ SynthDef("dc_offset", { |value=1.0, out_bus|
 
 (
 var fm_synth,
-    gate,
-    gate_bus,
-    master_gate_bus,
-    master_grp,
-    my_synth,
-    srv,
-    set_base_freq;
+gate,
+gate_bus,
+master_gate_bus,
+master_grp,
+my_synth,
+op_level_bus,
+peak,
+srv,
+set_base_freq;
 
 fm_synth = {
     // Four-operator FM synthesizer.
     //
     //
     var algorithms,
-        control_grp,
-        mod_grp,
-        num_ops,
-        op,
-        ops,
-        op_bus,
-        op_gate_bus,
-        op_grp,
-        set_algorithm,
-        synth_instance;
+	control_grp,
+	mod_grp,
+	num_ops,
+	op,
+	ops,
+	op_bus,
+	op_gate_bus,
+	op_grp,
+	set_algorithm,
+	synth_instance;
 
     op = { |gate_bus, fbase=440, gain=1|
         // FM operator.
@@ -60,16 +63,16 @@ fm_synth = {
         // containing functions that allow one to interact with the
         // operator's parameters.
         var amp_eg,
-            amp_mod_bus,
-            freq_bus,
-            freq_mod,
-            freq_mod_bus,
-            get_freq_mod_bus,
-            op,
-            op_instance,
-            set_adsr,
-            set_fbase,
-            set_out;
+		amp_mod_bus,
+		freq_bus,
+		freq_mod,
+		freq_mod_bus,
+		get_freq_mod_bus,
+		op,
+		op_instance,
+		set_adsr,
+		set_fbase,
+		set_out;
 
         // Instances of an FM synth create busses on the fly.
         amp_mod_bus = Bus.audio(s, 1);
@@ -77,14 +80,17 @@ fm_synth = {
         freq_mod_bus = Bus.audio(s, 1);
 
         // Setup some default modulation sources.
-        amp_eg = Synth.tail(mod_grp, "eg", [\gate_bus, gate_bus,
-                                            \out_bus, amp_mod_bus]);
+        amp_eg = Synth.tail(mod_grp, "eg", [
+			\gate_bus, gate_bus,
+			\level_bus, op_level_bus,
+			\out_bus, amp_mod_bus]);
         freq_mod = Synth.tail(mod_grp, "dc_offset", [\out_bus, freq_mod_bus]);
-        op = Synth.head(op_grp, "fm_op", [\fbase, fbase,
-                                          \fmod_bus, freq_mod_bus,
-                                          \abase, gain,
-                                          \amod_bus, amp_mod_bus,
-                                          \out_bus, op_bus]);
+        op = Synth.head(op_grp, "fm_op", [
+			\fbase, fbase,
+			\fmod_bus, freq_mod_bus,
+			\abase, gain,
+			\amod_bus, amp_mod_bus,
+			\out_bus, op_bus]);
 
         // LATER: Why can't I use a generic object?
         op_instance = Dictionary.new;
@@ -169,6 +175,8 @@ srv = Server.default;
 master_grp = Group.head(srv);
 master_gate_bus = Bus.audio(srv, 1);
 
+op_level_bus = Bus.audio(s, 1);
+
 my_synth = fm_synth.value();
 my_synth.at(\set_algorithm).value(2);
 
@@ -180,6 +188,16 @@ MIDIIn.noteOn = { |port, chan, note, vel|
     // Not sure if I really need to free the gate synth or not. Is
     // there a better approach?
     my_synth.at(\set_base_freq).value(note.midicps);
+	peak.free;
+	peak = Synth.head(
+		master_grp,
+		"dc_offset",
+		[
+			\value, vel/127,
+			\out_bus, op_level_bus
+		]
+	);
+	vel.postln;
     gate.free;
     gate = Synth.head(master_grp, "dc_offset", [\value, 1.0, \out_bus, gate_bus]);
 };
