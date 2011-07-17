@@ -40,11 +40,15 @@ fm_synth = {
     var algorithms,
     audio_out,
     control_grp,
+    current_voice,
+    get_voice_gate,
     mod_grp,
     num_voices,
     op,
     op_grp,
     ops_per_voice,
+    play_note,
+    play_note_for_voice,
     set_algorithm,
     synth_instance,
     voice,
@@ -184,6 +188,10 @@ fm_synth = {
         });
     };
 
+    get_voice_gate = {
+        voices[0].at(\get_gate_bus).value();
+    };
+
     // Set-up audio channels.
     audio_out = Bus.audio(s, 1);
 
@@ -203,39 +211,44 @@ fm_synth = {
         voices.add(v);
     });
 
-    // DEBUG
-    //gate = Synth.head(mod_grp, "dc_offset", [\value, 1.0, \out_bus, op_gate_bus]);
-    //{ Out.ar(0, In.ar(audio_out, 1)) }.play(s, addAction: \addToTail);
+    current_voice = {
+        voices[0];
+    };
+
+    play_note_for_voice = {|voice, note, vel|
+        voice.at(\set_base_freq).value(note.midicps);
+        peak.free;
+        peak = Synth.head(
+            master_grp,
+            "dc_offset",
+            [
+                \value, vel/127,
+                \out_bus, op_level_bus
+            ]
+        );
+        gate.free;
+        gate_bus = get_voice_gate.value();
+        gate = Synth.head(master_grp, "dc_offset", [\value, 1.0, \out_bus, gate_bus]);
+    };
+
+    play_note = {|note, vel|
+        var voice = current_voice.value();
+        play_note_for_voice.value(voice, note, vel);
+    };
 
     synth_instance = Dictionary.new;
-    synth_instance.put(\get_voice_gate, {voices[0].at(\get_gate_bus).value()}); // TODO: return voice bus dynamically
     synth_instance.put(\set_algorithm, set_algorithm);
     synth_instance.put(\get_output, {audio_out});
-    synth_instance.put(\set_base_freq, set_base_freq);
+    synth_instance.put(\play_note, play_note);
 };
 
 // Make MIDI connections.
 MIDIIn.connect;
 MIDIIn.noteOn = { |port, chan, note, vel|
-    // Not sure if I really need to free the gate synth or not. Is
-    // there a better approach?
-    my_synth.at(\set_base_freq).value(note.midicps);
-    peak.free;
-    peak = Synth.head(
-        master_grp,
-        "dc_offset",
-        [
-            \value, vel/127,
-            \out_bus, op_level_bus
-        ]
-    );
-    gate.free;
-    gate = Synth.head(master_grp, "dc_offset", [\value, 1.0, \out_bus, gate_bus]);
+    my_synth.at(\play_note).value(note, vel);
 };
 
 MIDIIn.noteOff = {
-    // Again, not sure if I need to free the synth everytime I want to
-    // change the gate value.
     gate.free;
     gate = Synth.head(master_grp, "dc_offset", [\value, 0.0, \out_bus, gate_bus]);
 };
@@ -249,8 +262,7 @@ op_level_bus = Bus.audio(srv, 1);
 
 my_synth = fm_synth.value();
 my_synth.at(\set_algorithm).value(2);
-gate_bus = my_synth.at(\get_voice_gate).value();
-gate = Synth.head(master_grp, "dc_offset", [\value, 0.0, \out_bus, gate_bus]);
+
 
 { Out.ar(0, In.ar(my_synth.at(\get_output).value(), 1)) }.play(srv, addAction: \addToTail);
 )
