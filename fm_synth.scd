@@ -24,12 +24,8 @@ SynthDef("dc_offset", { |value=1.0, out_bus|
 
 (
 var fm_synth,
-gate,
-gate_bus,
 master_grp,
 my_synth,
-op_level_bus,
-peak,
 srv,
 set_base_freq;
 
@@ -38,9 +34,11 @@ fm_synth = {
     //
     //
     var algorithms,
+	active_voices,
     audio_out,
     control_grp,
     current_voice,
+	gate_bus,
     get_voice_gate,
     mod_grp,
     num_voices,
@@ -48,20 +46,29 @@ fm_synth = {
     op_grp,
     ops_per_voice,
     play_note,
-    play_note_for_voice,
     set_algorithm,
+	stop_note,
     synth_instance,
     voice,
-    voices,
-    voice_gate_busses;
+    voices;
 
     voice = {|gate_bus, num_ops, voice_out|
         // Single voice for an FM synthesizer.
         //
         // A voice consists of one or more FM operators.
-        var ops,
+        var activate,
+		deactivate,
+		gate,
+		ops,
+		op_level_bus,
+		peak,
         set_algorithm,
         voice_instance;
+
+		// TODO: why aren't these control busses?
+		gate_bus = Bus.audio(srv, 1);
+		op_level_bus = Bus.audio(srv, 1);
+
         set_algorithm = {|algorithm|
             var set_out_to_speaker = {|operator| operator.at(\set_out_bus).value(audio_out)};
             var set_out_to_mod = {|operator, op_index| operator.at(\set_out_bus).value(ops[op_index].at(\get_freq_mod_bus).value())};
@@ -82,17 +89,56 @@ fm_synth = {
 
         ops = List();
         num_ops.do({
-            var operator = op.value(gate_bus, voice_out);
+            var operator = op.value(gate_bus, voice_out, op_level_bus);
             ops.add(operator);
         });
 
+		activate = { |note, vel|
+			// TODO - DEBUG - remove
+			postln("activate " + note + "@" + vel);
+
+			set_base_freq.value(note.midicps);
+			peak.free;
+			peak = Synth.head(
+				master_grp,
+				"dc_offset",
+				[
+					\value, vel/127,
+					\out_bus, op_level_bus
+				]
+			);
+			gate.free;
+			gate = Synth.head(
+				master_grp,
+				"dc_offset",
+				[
+					\value, 1.0,
+					\out_bus, gate_bus
+				]);
+		};
+
+		deactivate = {
+			// TODO - DEBUG - remove
+			postln("deactivate");
+			gate.free;
+			gate = Synth.head(
+				master_grp,
+				"dc_offset",
+				[
+					\value, 0.0,
+					\out_bus, gate_bus
+				]);
+		};
+
         voice_instance = Dictionary.new;
+		voice_instance.put(\activate, activate);
+		voice_instance.put(\deactivate, deactivate);
         voice_instance.put(\set_algorithm, set_algorithm);
         voice_instance.put(\set_base_freq, set_base_freq);
         voice_instance.put(\get_gate_bus, {gate_bus});
     };
 
-    op = { |gate_bus, out, fbase=440, gain=1|
+    op = { |gate_bus, out, op_level_bus, fbase=440, gain=1|
         // FM operator.
         //
         // An operator consists of a sine wave oscillator, an ADSR
@@ -215,31 +261,39 @@ fm_synth = {
         voices[0];
     };
 
-    play_note_for_voice = {|voice, note, vel|
-        voice.at(\set_base_freq).value(note.midicps);
-        peak.free;
-        peak = Synth.head(
-            master_grp,
-            "dc_offset",
-            [
-                \value, vel/127,
-                \out_bus, op_level_bus
-            ]
-        );
-        gate.free;
-        gate_bus = get_voice_gate.value();
-        gate = Synth.head(master_grp, "dc_offset", [\value, 1.0, \out_bus, gate_bus]);
+    play_note = { |note, vel|
+		// Play a note at a specific velocity, using the current
+		// voice.
+		//
+		var voice;
+        voice = current_voice.value;
+		active_voices.put(note, voice);
+		voice.at(\activate).value(note, vel);
+
+		// TODO: remove - DEBUG
+		//postln("Note on: " + active_voices);
     };
 
-    play_note = {|note, vel|
-        var voice = current_voice.value();
-        play_note_for_voice.value(voice, note, vel);
-    };
+	stop_note = { |note|
+		// Tell a voice to stop playing.
+		//
+		var voice;
+		voice = active_voices.matchAt(note).value;
+		active_voices.removeAt(note);
+		voice.at(\deactivate).value();
+
+		// TODO: remove - DEBUG
+		//postln("Note off: " + voice);
+		//postln("          " + active_voices);
+	};
+
+	active_voices = Dictionary.new;
 
     synth_instance = Dictionary.new;
     synth_instance.put(\set_algorithm, set_algorithm);
     synth_instance.put(\get_output, {audio_out});
     synth_instance.put(\play_note, play_note);
+	synth_instance.put(\stop_note, stop_note);
 };
 
 // Make MIDI connections.
@@ -248,17 +302,14 @@ MIDIIn.noteOn = { |port, chan, note, vel|
     my_synth.at(\play_note).value(note, vel);
 };
 
-MIDIIn.noteOff = {
-    gate.free;
-    gate = Synth.head(master_grp, "dc_offset", [\value, 0.0, \out_bus, gate_bus]);
+MIDIIn.noteOff = { |port, chan, note, vel|
+	my_synth.at(\stop_note).value(note);
 };
 
 // DEBUG
 srv = Server.default;
 
 master_grp = Group.head(srv);
-
-op_level_bus = Bus.audio(srv, 1);
 
 my_synth = fm_synth.value();
 my_synth.at(\set_algorithm).value(2);
