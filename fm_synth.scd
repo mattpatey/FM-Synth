@@ -26,8 +26,7 @@ SynthDef("dc_offset", { |value=1.0, out_bus|
 var fm_synth,
 master_grp,
 my_synth,
-srv,
-set_base_freq;
+srv;
 
 fm_synth = {
     // Four-operator FM synthesizer.
@@ -50,6 +49,9 @@ fm_synth = {
 	stop_note,
     synth_instance,
     voice,
+	v_gate,
+	v_output,
+	v,
     voices;
 
     voice = {|gate_bus, num_ops, voice_out|
@@ -63,6 +65,7 @@ fm_synth = {
 		op_level_bus,
 		peak,
         set_algorithm,
+		set_base_freq,
         voice_instance;
 
 		// TODO: why aren't these control busses?
@@ -82,14 +85,15 @@ fm_synth = {
 
         set_base_freq = { |value|
             // Sets the base frequency for all operators.
-            ops.do({|op|
+            ops.do({ |op|
                 op.at(\set_fbase).value(value);
             });
         };
 
         ops = List();
         num_ops.do({
-            var operator = op.value(gate_bus, voice_out, op_level_bus);
+			var operator;
+            operator = op.value(gate_bus, voice_out, op_level_bus);
             ops.add(operator);
         });
 
@@ -134,7 +138,6 @@ fm_synth = {
 		voice_instance.put(\activate, activate);
 		voice_instance.put(\deactivate, deactivate);
         voice_instance.put(\set_algorithm, set_algorithm);
-        voice_instance.put(\set_base_freq, set_base_freq);
         voice_instance.put(\get_gate_bus, {gate_bus});
     };
 
@@ -227,13 +230,6 @@ fm_synth = {
         [nil, nil, nil, nil]
     ];
 
-    set_base_freq = { |value|
-        // Sets the base frequency for all voices.
-        voices.do({ |voice, i|
-            voice.at(\set_base_freq).value(value);
-        });
-    };
-
     get_voice_gate = {
         voices[0].at(\get_gate_bus).value();
     };
@@ -247,18 +243,19 @@ fm_synth = {
     op_grp = Group.tail(s);
 
     // Set-up voices.
-    num_voices = 1;
+    num_voices = 2;
     ops_per_voice = 4;
     voices = List();
+
     num_voices.do({
-        var v_gate = Bus.audio(s, 1);
-        var v_output = Bus.audio(s, 1);
-        var v = voice.value(v_gate, ops_per_voice, audio_out);
+        v_gate = Bus.audio(s, 1);
+        v_output = Bus.audio(s, 1);
+        v = voice.value(v_gate, ops_per_voice, audio_out);
         voices.add(v);
     });
 
     current_voice = {
-        voices[0];
+        voices[1];
     };
 
     play_note = { |note, vel|
