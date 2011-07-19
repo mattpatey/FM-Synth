@@ -52,7 +52,8 @@ fm_synth = {
 	v_gate,
 	v_output,
 	v,
-    voices;
+    voices,
+	voice_index;
 
     voice = {|gate_bus, num_ops, voice_out|
         // Single voice for an FM synthesizer.
@@ -243,7 +244,7 @@ fm_synth = {
     op_grp = Group.tail(s);
 
     // Set-up voices.
-    num_voices = 2;
+    num_voices = 4;
     ops_per_voice = 4;
     voices = List();
 
@@ -254,9 +255,14 @@ fm_synth = {
         voices.add(v);
     });
 
+	voice_index = 0;
     current_voice = {
-        voices[1];
+		var index, last_voice;
+		last_voice = num_voices - 1;
+		voice_index = if(voice_index < last_voice, {voice_index + 1}, {0});
+        voices[voice_index];
     };
+
 
     play_note = { |note, vel|
 		// Play a note at a specific velocity, using the current
