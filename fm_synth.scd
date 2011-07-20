@@ -65,6 +65,7 @@ fm_synth = {
         var activate,
         deactivate,
         gate,
+        is_active,
         ops,
         op_level_bus,
         peak,
@@ -106,9 +107,7 @@ fm_synth = {
         });
 
         activate = { |note, vel|
-            // TODO - DEBUG - remove
-            postln("activate " + note + "@" + vel);
-
+            is_active = true;
             set_base_freq.value(note.midicps);
             peak.free;
             peak = Synth.head(
@@ -130,8 +129,7 @@ fm_synth = {
         };
 
         deactivate = {
-            // TODO - DEBUG - remove
-            postln("deactivate");
+            is_active = false;
             gate.free;
             gate = Synth.head(
                 master_grp,
@@ -141,12 +139,13 @@ fm_synth = {
                     \out_bus, gate_bus
                 ]);
         };
-
+        is_active = false;
         voice_instance = Dictionary.new;
         voice_instance.put(\activate, activate);
         voice_instance.put(\deactivate, deactivate);
         voice_instance.put(\set_algorithm, set_algorithm);
         voice_instance.put(\get_gate_bus, {gate_bus});
+        voice_instance.put(\is_active, {is_active});
     };
 
     op = { |gate_bus, out, op_level_bus, fbase=440, gain=1|
@@ -265,14 +264,17 @@ fm_synth = {
 
     voice_index = 0;
     get_next_available_voice = {
-        // TODO: Iterate over active voices, starting at the highest
-        // active voice and return the first unused voice. If no voice
-        // is free then select the voice based on some priority
-        // scheme, e.g. high/low note.
-        var index, last_voice;
-        last_voice = num_voices - 1;
-        voice_index = if(voice_index < last_voice, {voice_index + 1}, {0});
-        voices[voice_index];
+        var open_voice;
+
+        voices.do({ |voice, i|
+            if(voice.at(\is_active).value,
+                {nil},
+                {open_voice=voice});
+        });
+
+        // handle nil open voice using note priority strategy
+
+        open_voice;
     };
 
     play_note = { |note, vel|
