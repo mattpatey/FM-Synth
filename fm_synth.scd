@@ -4,7 +4,7 @@ SynthDef("fm_op", { |fbase, fmod_bus, freq_bus, abase, amod_bus, out_bus|
     //
     // FM and AM modulation are possible by passing audio rate signals to
     // `fmod` and `amod`, respectively.
-	var oscillator;
+    var oscillator;
     oscillator = SinOsc.ar(In.ar(fmod_bus) * (fbase + In.kr(freq_bus)), 0, abase * In.ar(amod_bus));
     Out.ar(out_bus, oscillator);
 }).send(s);
@@ -12,7 +12,7 @@ SynthDef("fm_op", { |fbase, fmod_bus, freq_bus, abase, amod_bus, out_bus|
 SynthDef("eg", { |a=0.01, d=0.7, s=0.0, r=0.01, gate_bus, level_bus, out_bus|
     // A standard, run-of-the-mill ADSR envelope generator, with
     // modulation possibilities on the peak level.
-	var envelope;
+    var envelope;
     envelope = EnvGen.ar(Env.adsr(a, d, s, r, In.ar(level_bus)), In.ar(gate_bus));
     Out.ar(out_bus, envelope);
 }).send(s);
@@ -20,7 +20,7 @@ SynthDef("eg", { |a=0.01, d=0.7, s=0.0, r=0.01, gate_bus, level_bus, out_bus|
 SynthDef("dc_offset", { |value=1.0, out_bus|
     // A static signal.
     var signal;
-	signal = DC.ar(value);
+    signal = DC.ar(value);
     Out.ar(out_bus, signal);
 }).send(s);
 )
@@ -36,11 +36,10 @@ fm_synth = {
     //
     //
     var algorithms,
-    active_voices,
     audio_out,
     control_grp,
     gate_bus,
-	get_next_available_voice,
+    get_next_available_voice,
     get_voice_gate,
     mod_grp,
     num_voices,
@@ -52,6 +51,7 @@ fm_synth = {
     stop_note,
     synth_instance,
     voice,
+    voices_by_note,
     v_gate,
     v_output,
     v,
@@ -77,14 +77,14 @@ fm_synth = {
         op_level_bus = Bus.audio(srv, 1);
 
         set_algorithm = {|algorithm|
-			var set_out_to_speaker,
-			set_out_to_mod;
+            var set_out_to_speaker,
+            set_out_to_mod;
             set_out_to_speaker = {|operator| operator.at(\set_out_bus).value(audio_out)};
             set_out_to_mod = {|operator, op_index| operator.at(\set_out_bus).value(ops[op_index].at(\get_freq_mod_bus).value())};
 
             ops.do({|op, index|
-				var mod_op_index,
-				output;
+                var mod_op_index,
+                output;
                 mod_op_index = algorithm[index];
                 output = if(mod_op_index.isNil, {set_out_to_speaker}, {set_out_to_mod});
                 output.value(op, mod_op_index);
@@ -225,7 +225,7 @@ fm_synth = {
     set_algorithm = { |value|
         // Define the structure of the FM by setting the outputs of
         // each voice's operators' outputs.
-		var algorithm;
+        var algorithm;
         algorithm = algorithms[value];
         voices.do({ |voice, i|
             voice.at(\set_algorithm).value(algorithm);
@@ -265,16 +265,15 @@ fm_synth = {
 
     voice_index = 0;
     get_next_available_voice = {
-		// TODO: Iterate over active voices, starting at the highest
-		// active voice and return the first unused voice. If no voice
-		// is free then select the voice based on some priority
-		// scheme, e.g. high/low note.
+        // TODO: Iterate over active voices, starting at the highest
+        // active voice and return the first unused voice. If no voice
+        // is free then select the voice based on some priority
+        // scheme, e.g. high/low note.
         var index, last_voice;
         last_voice = num_voices - 1;
         voice_index = if(voice_index < last_voice, {voice_index + 1}, {0});
         voices[voice_index];
     };
-
 
     play_note = { |note, vel|
         // Play a note at a specific velocity, using the current
@@ -282,27 +281,20 @@ fm_synth = {
         //
         var voice;
         voice = get_next_available_voice.value;
-        active_voices.put(note, voice);
+        voices_by_note.put(note, voice);
         voice.at(\activate).value(note, vel);
-
-        // TODO: remove - DEBUG
-        //postln("Note on: " + active_voices);
     };
 
     stop_note = { |note|
         // Tell a voice to stop playing.
         //
         var voice;
-        voice = active_voices.matchAt(note).value;
-        active_voices.removeAt(note);
+        voice = voices_by_note.matchAt(note).value;
+        voices_by_note.removeAt(note);
         voice.at(\deactivate).value();
-
-        // TODO: remove - DEBUG
-        //postln("Note off: " + voice);
-        //postln("          " + active_voices);
     };
 
-    active_voices = Dictionary.new;
+    voices_by_note = Dictionary.new;
 
     synth_instance = Dictionary.new;
     synth_instance.put(\set_algorithm, set_algorithm);
