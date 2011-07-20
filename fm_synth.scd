@@ -257,6 +257,10 @@ fm_synth = {
 
     voice_index = 0;
     get_next_available_voice = {
+		// TODO: Iterate over active voices, starting at the highest
+		// active voice and return the first unused voice. If no voice
+		// is free then select the voice based on some priority
+		// scheme, e.g. high/low note.
         var index, last_voice;
         last_voice = num_voices - 1;
         voice_index = if(voice_index < last_voice, {voice_index + 1}, {0});
