@@ -36,8 +36,8 @@ fm_synth = {
     active_voices,
     audio_out,
     control_grp,
-    current_voice,
     gate_bus,
+	get_next_available_voice,
     get_voice_gate,
     mod_grp,
     num_voices,
@@ -256,7 +256,7 @@ fm_synth = {
     });
 
     voice_index = 0;
-    current_voice = {
+    get_next_available_voice = {
         var index, last_voice;
         last_voice = num_voices - 1;
         voice_index = if(voice_index < last_voice, {voice_index + 1}, {0});
@@ -269,7 +269,7 @@ fm_synth = {
         // voice.
         //
         var voice;
-        voice = current_voice.value;
+        voice = get_next_available_voice.value;
         active_voices.put(note, voice);
         voice.at(\activate).value(note, vel);
 
