@@ -4,20 +4,23 @@ SynthDef("fm_op", { |fbase, fmod_bus, freq_bus, abase, amod_bus, out_bus|
     //
     // FM and AM modulation are possible by passing audio rate signals to
     // `fmod` and `amod`, respectively.
-    var oscillator = SinOsc.ar(In.ar(fmod_bus) * (fbase + In.kr(freq_bus)), 0, abase * In.ar(amod_bus));
+	var oscillator;
+    oscillator = SinOsc.ar(In.ar(fmod_bus) * (fbase + In.kr(freq_bus)), 0, abase * In.ar(amod_bus));
     Out.ar(out_bus, oscillator);
 }).send(s);
 
 SynthDef("eg", { |a=0.01, d=0.7, s=0.0, r=0.01, gate_bus, level_bus, out_bus|
     // A standard, run-of-the-mill ADSR envelope generator, with
     // modulation possibilities on the peak level.
-    var envelope = EnvGen.ar(Env.adsr(a, d, s, r, In.ar(level_bus)), In.ar(gate_bus));
+	var envelope;
+    envelope = EnvGen.ar(Env.adsr(a, d, s, r, In.ar(level_bus)), In.ar(gate_bus));
     Out.ar(out_bus, envelope);
 }).send(s);
 
 SynthDef("dc_offset", { |value=1.0, out_bus|
     // A static signal.
-    var signal = DC.ar(value);
+    var signal;
+	signal = DC.ar(value);
     Out.ar(out_bus, signal);
 }).send(s);
 )
@@ -74,12 +77,16 @@ fm_synth = {
         op_level_bus = Bus.audio(srv, 1);
 
         set_algorithm = {|algorithm|
-            var set_out_to_speaker = {|operator| operator.at(\set_out_bus).value(audio_out)};
-            var set_out_to_mod = {|operator, op_index| operator.at(\set_out_bus).value(ops[op_index].at(\get_freq_mod_bus).value())};
+			var set_out_to_speaker,
+			set_out_to_mod;
+            set_out_to_speaker = {|operator| operator.at(\set_out_bus).value(audio_out)};
+            set_out_to_mod = {|operator, op_index| operator.at(\set_out_bus).value(ops[op_index].at(\get_freq_mod_bus).value())};
 
             ops.do({|op, index|
-                var mod_op_index = algorithm[index];
-                var output = if(mod_op_index.isNil, {set_out_to_speaker}, {set_out_to_mod});
+				var mod_op_index,
+				output;
+                mod_op_index = algorithm[index];
+                output = if(mod_op_index.isNil, {set_out_to_speaker}, {set_out_to_mod});
                 output.value(op, mod_op_index);
             });
         };
@@ -218,10 +225,11 @@ fm_synth = {
     set_algorithm = { |value|
         // Define the structure of the FM by setting the outputs of
         // each voice's operators' outputs.
-        var algorithm = algorithms[value];
-        // voices.do({|voice, i|
-        //     voice.at(\set_algorithm).value(algorithm);
-        // });
+		var algorithm;
+        algorithm = algorithms[value];
+        voices.do({ |voice, i|
+            voice.at(\set_algorithm).value(algorithm);
+        });
     };
 
     algorithms = [
@@ -315,12 +323,8 @@ MIDIIn.noteOff = { |port, chan, note, vel|
 
 // DEBUG
 srv = Server.default;
-
 master_grp = Group.head(srv);
-
 my_synth = fm_synth.value();
 my_synth.at(\set_algorithm).value(2);
-
-
 { Out.ar(0, In.ar(my_synth.at(\get_output).value(), 1)) }.play(srv, addAction: \addToTail);
 )
