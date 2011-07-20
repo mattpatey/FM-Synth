@@ -42,7 +42,9 @@ fm_synth = {
     get_next_available_voice,
     get_voice_gate,
     mod_grp,
+    note_priority_strategy,
     num_voices,
+    oldest_note_played,
     op,
     op_grp,
     ops_per_voice,
@@ -261,8 +263,17 @@ fm_synth = {
         voices.add(v);
     });
 
+    oldest_note_played = {
+        // TODO: Return oldest note.
+        voices[0].value;
+    };
+
     get_next_available_voice = {
         // Return the first available inactive voice.
+
+        // TODO: Cycle over available voices so that recently
+        // activated voices with long release times play as long as
+        // possible.
         var open_voice;
 
         open_voice = block {|break|
@@ -271,16 +282,20 @@ fm_synth = {
                     {nil},
                     {break.value(voice.value)});
             });
+            break.value(nil);
         };
 
-        open_voice;
+        if(open_voice.isNil, {note_priority_strategy.value}, {open_voice});
     };
+
+    note_priority_strategy = oldest_note_played;
 
     play_note = { |note, vel|
         // Play a note at a specific velocity, using the current
         // voice.
         //
         var voice;
+        get_next_available_voice.value;
         voice = get_next_available_voice.value;
         voices_by_note.put(note, voice);
         voice.at(\activate).value(note, vel);
