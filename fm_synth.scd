@@ -55,8 +55,7 @@ fm_synth = {
     v_gate,
     v_output,
     v,
-    voices,
-    voice_index;
+    voices;
 
     voice = {|gate_bus, num_ops, voice_out|
         // Single voice for an FM synthesizer.
@@ -262,17 +261,17 @@ fm_synth = {
         voices.add(v);
     });
 
-    voice_index = 0;
     get_next_available_voice = {
+        // Return the first available inactive voice.
         var open_voice;
 
-        voices.do({ |voice, i|
-            if(voice.at(\is_active).value,
-                {nil},
-                {open_voice=voice});
-        });
-
-        // handle nil open voice using note priority strategy
+        open_voice = block {|break|
+            voices.do({ |voice, i|
+                if(voice.at(\is_active).value,
+                    {nil},
+                    {break.value(voice.value)});
+            });
+        };
 
         open_voice;
     };
